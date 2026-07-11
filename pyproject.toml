@@ -26,8 +26,12 @@ classifiers = [
 ]
 
 # Pinned minimums match what the paper experiments were run with.
+# torch is intentionally left unpinned to a CUDA/ROCm-specific build here;
+# the actual wheel comes from the ROCm index configured in [tool.uv.sources]
+# / [[tool.uv.index]] below.
 dependencies = [
-    "torch>=2.1",
+    "torch==2.10.0",
+    "triton==3.6.0+rocm7.2.4.git4ed88892 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
     "numpy>=1.24",
     "pandas>=2.0",
     "scikit-learn>=1.3",
@@ -42,9 +46,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# WSI handling — only needed for spatial / niche-atlas figure regeneration
+# WSI handling with the Python bindings only. Assumes libopenslide is
+# already provided by the system (e.g. `pacman -S openslide` on Arch).
 wsi = [
     "openslide-python>=1.3",
+    "pylibCZIrw>=4.0",
+    "Pillow>=10.0",
+]
+# Portable variant of the WSI extra: bundles a self-contained OpenSlide
+# binary via openslide-bin, so no system library install is required.
+# Mutually redundant with `wsi`'s system-library assumption -- install this
+# instead of `wsi` on machines without libopenslide preinstalled.
+wsi-portable = [
+    "openslide-python>=1.3",
+    "openslide-bin>=4.0.0",
     "pylibCZIrw>=4.0",
     "Pillow>=10.0",
 ]
@@ -60,6 +75,14 @@ dev = [
 sparc-train = "train:main"
 sparc-inference = "inference.run:main"
 
-[tool.setuptools]
-packages = ["sparc", "sparc.data", "sparc.models", "sparc.utils",
-            "inference", "analysis"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sparc*", "inference*", "analysis*"]
+
+# --- uv-specific configuration -------------------------------------------
+
+# Get torch wheels from AMD's repos for compile compatibility.
+[tool.uv]
+find-links = [
+  "https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.4/",
+]
