@@ -26,9 +26,7 @@ classifiers = [
 ]
 
 # Pinned minimums match what the paper experiments were run with.
-# torch is intentionally left unpinned to a CUDA/ROCm-specific build here;
-# the actual wheel comes from the ROCm index configured in [tool.uv.sources]
-# / [[tool.uv.index]] below.
+
 dependencies = [
     "torch==2.10.0",
     "triton==3.6.0+rocm7.2.4.git4ed88892 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
