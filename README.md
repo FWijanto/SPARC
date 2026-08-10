@@ -2,12 +2,14 @@
 
 **Gene-program-aware survival modelling from H&E whole-slide images.**
 
-SPARC is a two-stage pipeline:
+SPARC is an end-to-end three-stage pipeline:
 
-1. **SPARC-Map** predicts 40 hallmark gene-expression-program (GEP) scores per
+1. **H&E preprocessing** uses Trident, GrandQC, and H-Optimus-1 to create
+   aligned patch embeddings and coordinates from raw whole-slide images.
+2. **SPARC-Map** predicts 40 hallmark gene-expression-program (GEP) scores per
    H&E patch directly from the image, recovering a *spatial* molecular map of
    the slide and enabling unsupervised niche discovery.
-2. **SPARC-Risk** fuses those per-patch GEP scores with the same H&E features
+3. **SPARC-Risk** fuses those per-patch GEP scores with the same H&E features
    through a signature-query attention head and a cancer-aware gating
    mechanism, producing a single per-patient risk score that drives
    prognostic stratification, biomarker readouts, and treatment-response
@@ -40,6 +42,7 @@ sparc-public/
 │   ├── cohorts.py            Per-cohort declarative configs (NLST, SurGen, Ömer)
 │   ├── run.py                Unified CLI
 │   └── training_cohort.py    Training-cohort prediction generator
+├── preprocessing/            Raw H&E, SPARC-Map, and unified pipeline CLI
 ├── analysis/                 TME / spatial analysis + figure scripts
 │   ├── spatial_tcga.py       Pan-TCGA niche discovery + cross-correlation
 │   ├── spatial_external.py   SurGen + NLST external spatial analysis
@@ -64,6 +67,15 @@ pytest tests/
 python scripts/prepare_tcga_clinical.py \
     --input /path/to/TCGA-CDR-SupplementalTableS1.xlsx
 
+# Run raw slides through all three stages
+sparc-pipeline all \
+    --wsi-dir /path/to/slides \
+    --work-dir /path/to/work \
+    --gpus 0,1,2,3 \
+    --map-model-path /path/to/sparc-map/best_model.pth \
+    --risk-checkpoint-dir /path/to/checkpoints/sparc_risk \
+    --cancer-type TCGA-LUAD
+
 # Train SPARC-Risk (5-fold CV, 1 GPU)
 python train.py --config configs/sparc_risk.yaml
 
@@ -75,6 +87,62 @@ python -m inference.run --cohort nlst \
 # Regenerate the niche-atlas supplementary figures
 python -m analysis.niche_atlas
 ```
+
+## End-to-end preprocessing and inference
+
+`sparc-pipeline` can run the complete workflow or any stage independently:
+
+```bash
+# 1. Raw H&E -> H-Optimus-1 embeddings
+sparc-pipeline extract --wsi-dir /slides --work-dir /work --gpus 0,1,2,3
+
+# 2. H-Optimus-1 embeddings -> 40 SPARC-Map scores per patch
+sparc-pipeline map \
+    --embedding-dir /work/20x_224px_0px_overlap/features_hoptimus1 \
+    --output-dir /work/sparc_map \
+    --model-path /models/sparc-map/best_model.pth --gpu 0
+
+# 3. Matching embeddings and GEP scores -> one risk result per slide
+sparc-pipeline risk \
+    --embedding-dir /work/20x_224px_0px_overlap/features_hoptimus1 \
+    --gep-dir /work/sparc_map \
+    --checkpoint-dir /models/sparc_risk \
+    --output-dir /work/risk --cancer-type TCGA-LUAD
+```
+
+For mixed-cancer runs, replace `--cancer-type` with `--cancer-map-csv`. The CSV
+must contain `slide_id,cancer_type`, where cancer types use the canonical
+`TCGA-*` labels accepted by SPARC. Existing files are skipped so interrupted
+runs can resume. Use `--force` only when prior extraction or map outputs should
+be replaced.
+
+The extraction manifest contains `wsi,mpp,mpp_source`. H-Optimus files contain
+`features` (`N x 1536`) and `coords` (`N x 2`); SPARC-Map files contain
+`features` (`N x 40`) in the checkpoint's program order. Stage 3 verifies patch
+counts and feature dimensions before inference and writes compressed `.npz`
+files containing `risk`, `embedding`, and `ct_idx`.
+
+Model weights and generated data are intentionally not committed. Pass the
+SPARC-Map checkpoint explicitly and download SPARC-Risk checkpoints as described
+below. Set `HF_HOME` or pass `--hf-cache` to keep downloaded Trident assets in a
+large external cache. Raw slides, checkpoints, manifests, features, and results
+are ignored by Git.
+
+### Pipeline tests
+
+Fast tests use unique temporary directories below
+`/data/scratch/gcohn/sparc-pipeline-tests` by default; override this with
+`SPARC_TEST_OUTPUT_ROOT`. The real GPU smoke test is opt-in:
+
+```bash
+SPARC_SMOKE_WSI_DIR=/path/containing/one/slide \
+SPARC_MAP_CHECKPOINT=/models/sparc-map/best_model.pth \
+SPARC_RISK_CHECKPOINT_DIR=/models/sparc_risk \
+SPARC_SMOKE_CANCER_TYPE=TCGA-LUAD \
+pytest -m integration tests/test_pipeline_integration.py
+```
+
+The integration test writes only below the configured scratch root.
 
 ## Highlights
 
