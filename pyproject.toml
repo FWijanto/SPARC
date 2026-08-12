@@ -74,6 +74,9 @@ sparc-train = "train:main"
 sparc-inference = "inference.run:main"
 sparc-pipeline = "preprocessing.pipeline:main"
 
+[tool.setuptools]
+py-modules = ["train"]
+
 [tool.setuptools.packages.find]
 include = ["sparc*", "inference*", "analysis*", "preprocessing*"]
 
