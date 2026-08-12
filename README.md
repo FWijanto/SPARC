@@ -31,7 +31,8 @@ sparc-public/
 │   ├── sparc_risk.yaml
 │   ├── image_only.yaml
 │   └── late_fusion.yaml
-├── data/                     Splits + clinical CSVs (small text files only)
+├── data/                     Paper split + clinical-data preparation notes
+├── scripts/                  Reproducible data-preparation utilities
 ├── sparc/                    Core Python package (models, data, utils)
 ├── train.py                  5-fold cross-validation training entry point
 ├── inference/                External-cohort inference pipeline
@@ -58,6 +59,10 @@ conda activate sparc
 
 # Confirm the package builds
 pytest tests/
+
+# Prepare DSS outcomes from the public TCGA-CDR supplement
+python scripts/prepare_tcga_clinical.py \
+    --input /path/to/TCGA-CDR-SupplementalTableS1.xlsx
 
 # Train SPARC-Risk (5-fold CV, 1 GPU)
 python train.py --config configs/sparc_risk.yaml
@@ -116,15 +121,17 @@ The configs and inference pipeline expect:
 
 | Path / env-var | Contents |
 |---|---|
-| `data/mmp_hybrid_splits_v2_20cancer.csv` (committed) | 5-fold CV splits over 20 TCGA cancers |
-| `data/clinical_dss.csv` (committed) | Disease-specific survival labels |
+| `data/mmp_hybrid_splits_v2_20cancer.csv` (committed) | Exact 5-fold TCGA split used for the paper (19 disease cohorts; 18 reporting groups) |
+| `data/clinical_dss.csv` (generated locally) | Disease-specific survival labels reconstructed from the public TCGA-CDR supplement |
 | `$SPARC_TCGA_GEP` (default `features/tcga/predicted_programs_transformer/`) | Per-slide gene-program HDF5s |
 | `$SPARC_TCGA_COORD` (default `features/tcga/hoptimus1/`) | Per-slide image-feature HDF5s |
 | `$SPARC_NLST_*`, `$SPARC_SURGEN_*`, `$SPARC_OMER_*` | External-cohort feature directories |
 
-See `data/README.md` for the full layout. Patch features are large and are
-**not** committed to this repository — see the data README for download
-instructions and the feature-extraction protocol.
+The split is versioned because it is required to reproduce the evaluation.
+Clinical outcome rows are not redistributed in this repository; the command
+above recreates the exact input table from the public TCGA-CDR Table S1.
+See `data/README.md` for its source, checksum, and the full feature layout.
+Patch features are large and are **not** committed to this repository.
 
 ## Trained checkpoints
 
