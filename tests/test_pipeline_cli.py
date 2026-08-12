@@ -50,14 +50,18 @@ def test_all_stage_handoffs(monkeypatch, scratch_dir):
     calls = []
     monkeypatch.setattr(pipeline, "run_extract", lambda args: embeddings)
     monkeypatch.setattr(pipeline, "run_map", lambda *args: calls.append(("map", args)))
-    monkeypatch.setattr(pipeline, "run_generic", lambda *args: calls.append(("risk", args)))
+    monkeypatch.setattr(
+        pipeline, "run_generic",
+        lambda *args, **kwargs: calls.append(("risk", args, kwargs)),
+    )
     pipeline.main([
         "all", "--wsi-dir", str(slides), "--work-dir", str(scratch_dir / "work"),
         "--gpus", "0,1", "--map-model-path", str(scratch_dir / "map.pth"),
         "--risk-checkpoint-dir", str(scratch_dir / "risk-checkpoints"),
-        "--cancer-type", "TCGA-LUAD",
+        "--cancer-type", "TCGA-LUAD", "--force",
     ])
     assert calls[0][0] == "map"
     assert calls[0][1][0] == embeddings
     assert calls[1][0] == "risk"
     assert calls[1][1][0] == embeddings
+    assert calls[1][2]["overwrite"] is True

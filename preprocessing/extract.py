@@ -20,9 +20,15 @@ def parse_gpus(value: str | Sequence[int]) -> list[int]:
 def run_partition(wsi_dir: Path, work_dir: Path, split_csv: Path, gpu: int, patch_size: int = 224,
                   magnification: int = 20, overlap: int = 0, batch_size: int = 64,
                   reader_type: str = "openslide") -> None:
-    from preprocessing.trident import Processor
-    from preprocessing.trident.patch_encoder_models.load import encoder_factory
-    from preprocessing.trident.segmentation_models.load import segmentation_model_factory
+    try:
+        from trident import Processor
+        from trident.patch_encoder_models.load import encoder_factory
+        from trident.segmentation_models.load import segmentation_model_factory
+    except ImportError as exc:
+        raise ImportError(
+            "Raw-slide extraction requires TRIDENT; install SPARC with "
+            "`pip install -e '.[wsi]'`."
+        ) from exc
 
     processor = Processor(
         job_dir=str(work_dir), wsi_source=str(wsi_dir), custom_list_of_wsis=str(split_csv),

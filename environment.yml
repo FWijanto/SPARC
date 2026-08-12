@@ -34,4 +34,4 @@ dependencies:
     - timm==0.9.16
     - einops-exts>=0.0.4
     - segmentation-models-pytorch>=0.3.3
-    - -e .
+    - -e .[wsi]

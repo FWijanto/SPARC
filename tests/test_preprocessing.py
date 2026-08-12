@@ -34,6 +34,12 @@ def test_prepare_splits_is_balanced_and_deterministic(scratch_dir):
     with pytest.raises(FileExistsError):
         prepare_splits(manifest, scratch_dir / "splits", 3)
 
+    resized = prepare_splits(manifest, scratch_dir / "splits", 2, overwrite=True)
+    resized_frames = [pd.read_csv(path) for path in resized]
+    assert [len(frame) for frame in resized_frames] == [4, 3]
+    assert pd.concat(resized_frames).wsi.tolist() == [f"slide-{i}.svs" for i in range(7)]
+    assert not (scratch_dir / "splits" / "split_02.csv").exists()
+
 
 def test_tifffile_mpp_fallback(scratch_dir):
     import tifffile

@@ -1,10 +1,11 @@
-# Third-party notices
+# Third-party software
 
-The source below `preprocessing/trident/` is derived from the Mahmood Lab
-[TRIDENT](https://github.com/mahmoodlab/TRIDENT) project, version 0.2.0. It is
-included to make the H&E preprocessing stage reproducible and remains subject
-to TRIDENT's CC BY-NC-ND 4.0 license. See `preprocessing/trident/LICENSE`.
+Whole-slide preprocessing uses the official Mahmood Lab
+[TRIDENT](https://github.com/mahmoodlab/TRIDENT) package, pinned to release tag
+v0.2.2 (commit `2daba084238f72b8f207fb0b5fe25e44637a6b5c`). TRIDENT is
+installed as an external dependency and its source is not redistributed by
+this repository. It remains subject to its
+[CC BY-NC-ND 4.0 license](https://github.com/mahmoodlab/TRIDENT/blob/main/LICENSE).
 
-No pretrained model weights are redistributed by this repository. H-Optimus,
-GrandQC, SPARC-Map, and SPARC-Risk weights must be obtained from their original
-distribution locations and caches.
+H-Optimus and GrandQC weights are obtained from their original distribution
+locations and caches.

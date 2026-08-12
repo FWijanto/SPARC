@@ -57,7 +57,8 @@ def validate_inputs(embedding_dir: Path, gep_dir: Path, needs_gep: bool = True) 
 
 def run_generic(embedding_dir: Path, gep_dir: Path, checkpoint_dir: Path, output_dir: Path,
                 cancer_type: str | None = None, cancer_map_csv: Path | None = None,
-                device_name: str = "cuda:0", per_fold: bool = False) -> list[Path]:
+                device_name: str = "cuda:0", per_fold: bool = False,
+                overwrite: bool = False) -> list[Path]:
     checkpoints = load_checkpoints(checkpoint_dir)
     needs_gep = fusion_needs_gep(checkpoints)
     slides = validate_inputs(embedding_dir, gep_dir, needs_gep)
@@ -70,7 +71,7 @@ def run_generic(embedding_dir: Path, gep_dir: Path, checkpoint_dir: Path, output
     try:
         for slide in slides:
             destination = Path(output_dir) / f"{slide}.npz"
-            if destination.exists():
+            if destination.exists() and not overwrite:
                 outputs.append(destination)
                 continue
             embedding, gep, coords = load_slide_features(
@@ -106,6 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--cancer-map-csv", type=Path)
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--per-fold", action="store_true")
+    parser.add_argument("--force", action="store_true")
     return parser
 
 
@@ -114,6 +116,7 @@ def main(argv: Iterable[str] | None = None) -> None:
     outputs = run_generic(
         args.embedding_dir, args.gep_dir, args.checkpoint_dir, args.output_dir,
         args.cancer_type, args.cancer_map_csv, args.device, args.per_fold,
+        overwrite=args.force,
     )
     print(f"Wrote {len(outputs)} risk predictions below {args.output_dir}")
 

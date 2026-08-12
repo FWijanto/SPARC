@@ -25,6 +25,10 @@ def prepare_splits(input_csv: Path, output_dir: Path, num_splits: int, overwrite
     existing = [path for path in paths if path.exists()]
     if existing and not overwrite:
         raise FileExistsError(f"Split outputs exist; pass --overwrite: {existing[0]}")
+    if overwrite:
+        for stale_path in output_dir.glob("split_*.csv"):
+            if stale_path not in paths:
+                stale_path.unlink()
     index_chunks = np.array_split(np.arange(len(frame)), num_splits)
     for path, indices in zip(paths, index_chunks):
         frame.iloc[indices].to_csv(path, index=False)

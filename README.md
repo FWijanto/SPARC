@@ -19,6 +19,10 @@ The repository ships training code for SPARC-Risk, an image-only baseline,
 and a late-fusion ablation, plus the inference / TME analysis / figure
 scripts used in the paper.
 
+Raw-slide preprocessing uses the official
+[TRIDENT](https://github.com/mahmoodlab/TRIDENT) package as a pinned external
+dependency; TRIDENT source code is not redistributed here.
+
 <p align="center">
   <img src="docs/figs/figure1.png" alt="SPARC overview" width="780">
 </p>
@@ -92,6 +96,9 @@ python -m analysis.niche_atlas
 
 `sparc-pipeline` can run the complete workflow or any stage independently:
 
+Raw-slide extraction requires the WSI dependencies installed by
+`pip install -e ".[wsi]"`; the provided conda environment includes them.
+
 ```bash
 # 1. Raw H&E -> H-Optimus-1 embeddings
 sparc-pipeline extract --wsi-dir /slides --work-dir /work --gpus 0,1,2,3
@@ -113,8 +120,9 @@ sparc-pipeline risk \
 For mixed-cancer runs, replace `--cancer-type` with `--cancer-map-csv`. The CSV
 must contain `slide_id,cancer_type`, where cancer types use the canonical
 `TCGA-*` labels accepted by SPARC. Existing files are skipped so interrupted
-runs can resume. Use `--force` only when prior extraction or map outputs should
-be replaced.
+runs can resume. `--force` refreshes generated extraction manifests and replaces
+SPARC-Map and SPARC-Risk outputs; existing Trident extraction artifacts remain
+resumable.
 
 The extraction manifest contains `wsi,mpp,mpp_source`. H-Optimus files contain
 `features` (`N x 1536`) and `coords` (`N x 2`); SPARC-Map files contain
@@ -130,9 +138,8 @@ are ignored by Git.
 
 ### Pipeline tests
 
-Fast tests use unique temporary directories below
-`/data/scratch/gcohn/sparc-pipeline-tests` by default; override this with
-`SPARC_TEST_OUTPUT_ROOT`. The real GPU smoke test is opt-in:
+Fast tests use pytest-managed temporary directories. Set `SPARC_TEST_OUTPUT_ROOT`
+to place outputs on a larger filesystem. The real GPU smoke test is opt-in:
 
 ```bash
 SPARC_SMOKE_WSI_DIR=/path/containing/one/slide \

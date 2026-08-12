@@ -47,9 +47,8 @@ def run_extract(args: argparse.Namespace) -> Path:
     split_dir = args.work_dir / "split_lists"
     if not manifest.exists() or args.force:
         prepare_mpp(args.wsi_dir, manifest, args.default_mpp, args.force)
-    split_paths = [split_dir / f"split_{i:02d}.csv" for i in range(len(args.gpu_ids))]
-    if args.force or not all(path.exists() for path in split_paths):
-        prepare_splits(manifest, split_dir, len(args.gpu_ids), args.force)
+    # Split manifests are cheap to regenerate and must match the current worker count.
+    prepare_splits(manifest, split_dir, len(args.gpu_ids), overwrite=True)
     if args.hf_cache:
         os.environ["HF_HOME"] = str(args.hf_cache)
     return run_parallel(
@@ -100,6 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
     risk.add_argument("--output-dir", type=Path, required=True)
     risk.add_argument("--device", default="cuda:0")
     risk.add_argument("--per-fold", action="store_true")
+    risk.add_argument("--force", action="store_true")
     add_risk_mapping(risk)
 
     all_stages = subparsers.add_parser("all", help="Run all three stages")
@@ -125,6 +125,7 @@ def main(argv: Iterable[str] | None = None) -> None:
         run_generic(
             args.embedding_dir, args.gep_dir, args.checkpoint_dir, args.output_dir,
             args.cancer_type, args.cancer_map_csv, args.device, args.per_fold,
+            overwrite=args.force,
         )
         return
 
@@ -135,6 +136,7 @@ def main(argv: Iterable[str] | None = None) -> None:
     run_generic(
         embeddings, gep_dir, args.risk_checkpoint_dir, risk_dir,
         args.cancer_type, args.cancer_map_csv, f"cuda:{args.gpu_ids[0]}", args.per_fold,
+        overwrite=args.force,
     )
     print(f"SPARC pipeline complete. Risk scores: {risk_dir}")
 
