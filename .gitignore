@@ -23,14 +23,27 @@ env/
 .idea/
 *.swp
 *.swo
+/.codex
 
-# Data — large files distributed separately, see data/README.md
+# Data - large files distributed separately, see data/README.md
 data/*.csv
+!data/mmp_hybrid_splits_v2_20cancer.csv
 !data/README.md
+data/*.xlsx
 
 # Trained checkpoints — distributed separately
 checkpoints/
 runs/
+features/
+work/
+split_lists/
+slides_with_mpp.csv
+.cache/
+wandb/
+*.svs
+*.ndpi
+*.tif
+*.tiff
 
 # Inference outputs and figures — regenerated from code.
 # Anchored to the repo root so it does not match docs/figs/ (which holds

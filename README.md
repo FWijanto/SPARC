@@ -2,12 +2,14 @@
 
 **Gene-program-aware survival modelling from H&E whole-slide images.**
 
-SPARC is a two-stage pipeline:
+SPARC is an end-to-end three-stage pipeline:
 
-1. **SPARC-Map** predicts 40 hallmark gene-expression-program (GEP) scores per
+1. **H&E preprocessing** uses Trident, GrandQC, and H-Optimus-1 to create
+   aligned patch embeddings and coordinates from raw whole-slide images.
+2. **SPARC-Map** predicts 40 hallmark gene-expression-program (GEP) scores per
    H&E patch directly from the image, recovering a *spatial* molecular map of
    the slide and enabling unsupervised niche discovery.
-2. **SPARC-Risk** fuses those per-patch GEP scores with the same H&E features
+3. **SPARC-Risk** fuses those per-patch GEP scores with the same H&E features
    through a signature-query attention head and a cancer-aware gating
    mechanism, producing a single per-patient risk score that drives
    prognostic stratification, biomarker readouts, and treatment-response
@@ -16,6 +18,10 @@ SPARC is a two-stage pipeline:
 The repository ships training code for SPARC-Risk, an image-only baseline,
 and a late-fusion ablation, plus the inference / TME analysis / figure
 scripts used in the paper.
+
+Raw-slide preprocessing uses the official
+[TRIDENT](https://github.com/mahmoodlab/TRIDENT) package as a pinned external
+dependency; TRIDENT source code is not redistributed here.
 
 <p align="center">
   <img src="docs/figs/figure1.png" alt="SPARC overview" width="780">
@@ -31,7 +37,8 @@ sparc-public/
 │   ├── sparc_risk.yaml
 │   ├── image_only.yaml
 │   └── late_fusion.yaml
-├── data/                     Splits + clinical CSVs (small text files only)
+├── data/                     Paper split + clinical-data preparation notes
+├── scripts/                  Reproducible data-preparation utilities
 ├── sparc/                    Core Python package (models, data, utils)
 ├── train.py                  5-fold cross-validation training entry point
 ├── inference/                External-cohort inference pipeline
@@ -39,6 +46,7 @@ sparc-public/
 │   ├── cohorts.py            Per-cohort declarative configs (NLST, SurGen, Ömer)
 │   ├── run.py                Unified CLI
 │   └── training_cohort.py    Training-cohort prediction generator
+├── preprocessing/            Raw H&E, SPARC-Map, and unified pipeline CLI
 ├── analysis/                 TME / spatial analysis + figure scripts
 │   ├── spatial_tcga.py       Pan-TCGA niche discovery + cross-correlation
 │   ├── spatial_external.py   SurGen + NLST external spatial analysis
@@ -59,6 +67,19 @@ conda activate sparc
 # Confirm the package builds
 pytest tests/
 
+# Prepare DSS outcomes from the public TCGA-CDR supplement
+python scripts/prepare_tcga_clinical.py \
+    --input /path/to/TCGA-CDR-SupplementalTableS1.xlsx
+
+# Run raw slides through all three stages
+sparc-pipeline all \
+    --wsi-dir /path/to/slides \
+    --work-dir /path/to/work \
+    --gpus 0,1,2,3 \
+    --map-model-path /path/to/sparc-map/best_model.pth \
+    --risk-checkpoint-dir /path/to/checkpoints/sparc_risk \
+    --cancer-type TCGA-LUAD
+
 # Train SPARC-Risk (5-fold CV, 1 GPU)
 python train.py --config configs/sparc_risk.yaml
 
@@ -70,6 +91,65 @@ python -m inference.run --cohort nlst \
 # Regenerate the niche-atlas supplementary figures
 python -m analysis.niche_atlas
 ```
+
+## End-to-end preprocessing and inference
+
+`sparc-pipeline` can run the complete workflow or any stage independently:
+
+Raw-slide extraction requires the WSI dependencies installed by
+`pip install -e ".[wsi]"`; the provided conda environment includes them.
+
+```bash
+# 1. Raw H&E -> H-Optimus-1 embeddings
+sparc-pipeline extract --wsi-dir /slides --work-dir /work --gpus 0,1,2,3
+
+# 2. H-Optimus-1 embeddings -> 40 SPARC-Map scores per patch
+sparc-pipeline map \
+    --embedding-dir /work/20x_224px_0px_overlap/features_hoptimus1 \
+    --output-dir /work/sparc_map \
+    --model-path /models/sparc-map/best_model.pth --gpu 0
+
+# 3. Matching embeddings and GEP scores -> one risk result per slide
+sparc-pipeline risk \
+    --embedding-dir /work/20x_224px_0px_overlap/features_hoptimus1 \
+    --gep-dir /work/sparc_map \
+    --checkpoint-dir /models/sparc_risk \
+    --output-dir /work/risk --cancer-type TCGA-LUAD
+```
+
+For mixed-cancer runs, replace `--cancer-type` with `--cancer-map-csv`. The CSV
+must contain `slide_id,cancer_type`, where cancer types use the canonical
+`TCGA-*` labels accepted by SPARC. Existing files are skipped so interrupted
+runs can resume. `--force` refreshes generated extraction manifests and replaces
+SPARC-Map and SPARC-Risk outputs; existing Trident extraction artifacts remain
+resumable.
+
+The extraction manifest contains `wsi,mpp,mpp_source`. H-Optimus files contain
+`features` (`N x 1536`) and `coords` (`N x 2`); SPARC-Map files contain
+`features` (`N x 40`) in the checkpoint's program order. Stage 3 verifies patch
+counts and feature dimensions before inference and writes compressed `.npz`
+files containing `risk`, `embedding`, and `ct_idx`.
+
+Model weights and generated data are intentionally not committed. Pass the
+SPARC-Map checkpoint explicitly and download SPARC-Risk checkpoints as described
+below. Set `HF_HOME` or pass `--hf-cache` to keep downloaded Trident assets in a
+large external cache. Raw slides, checkpoints, manifests, features, and results
+are ignored by Git.
+
+### Pipeline tests
+
+Fast tests use pytest-managed temporary directories. Set `SPARC_TEST_OUTPUT_ROOT`
+to place outputs on a larger filesystem. The real GPU smoke test is opt-in:
+
+```bash
+SPARC_SMOKE_WSI_DIR=/path/containing/one/slide \
+SPARC_MAP_CHECKPOINT=/models/sparc-map/best_model.pth \
+SPARC_RISK_CHECKPOINT_DIR=/models/sparc_risk \
+SPARC_SMOKE_CANCER_TYPE=TCGA-LUAD \
+pytest -m integration tests/test_pipeline_integration.py
+```
+
+The integration test writes only below the configured scratch root.
 
 ## Highlights
 
@@ -116,15 +196,17 @@ The configs and inference pipeline expect:
 
 | Path / env-var | Contents |
 |---|---|
-| `data/mmp_hybrid_splits_v2_20cancer.csv` (committed) | 5-fold CV splits over 20 TCGA cancers |
-| `data/clinical_dss.csv` (committed) | Disease-specific survival labels |
+| `data/mmp_hybrid_splits_v2_20cancer.csv` (committed) | Exact 5-fold TCGA split used for the paper (19 disease cohorts; 18 reporting groups) |
+| `data/clinical_dss.csv` (generated locally) | Disease-specific survival labels reconstructed from the public TCGA-CDR supplement |
 | `$SPARC_TCGA_GEP` (default `features/tcga/predicted_programs_transformer/`) | Per-slide gene-program HDF5s |
 | `$SPARC_TCGA_COORD` (default `features/tcga/hoptimus1/`) | Per-slide image-feature HDF5s |
 | `$SPARC_NLST_*`, `$SPARC_SURGEN_*`, `$SPARC_OMER_*` | External-cohort feature directories |
 
-See `data/README.md` for the full layout. Patch features are large and are
-**not** committed to this repository — see the data README for download
-instructions and the feature-extraction protocol.
+The split is versioned because it is required to reproduce the evaluation.
+Clinical outcome rows are not redistributed in this repository; the command
+above recreates the exact input table from the public TCGA-CDR Table S1.
+See `data/README.md` for its source, checksum, and the full feature layout.
+Patch features are large and are **not** committed to this repository.
 
 ## Trained checkpoints
 
