@@ -64,16 +64,7 @@ wsi = [
     "pylibCZIrw>=4.0",
     "Pillow>=10.0",
 ]
-# Portable variant of the WSI extra: bundles a self-contained OpenSlide
-# binary via openslide-bin, so no system library install is required.
-# Mutually redundant with `wsi`'s system-library assumption -- install this
-# instead of `wsi` on machines without libopenslide preinstalled.
-wsi-portable = [
-    "openslide-python>=1.3",
-    "openslide-bin>=4.0.0",
-    "pylibCZIrw>=4.0",
-    "Pillow>=10.0",
-]
+
 # Notebooks + dev tools
 dev = [
     "jupyter>=1.0",
