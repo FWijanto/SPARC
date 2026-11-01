@@ -31,11 +31,17 @@ from matplotlib.path import Path as MPath
 import warnings
 warnings.filterwarnings('ignore')
 
-import openslide
+# Add `sys.path` fallback so the helper resolves
+# when this module is run as `python -m analysis.niche_atlas` from the repo root.
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from preprocessing.slide_backend import open_slide, read_mpp_from_props
 
 OUT = Path(os.environ.get('SPARC_FIGS_ROOT', 'figs')) / 'spatial'
 OUT.mkdir(parents=True, exist_ok=True)
 DPI = 600  # paper-grade
+
+WSI_BACKEND = os.environ.get('SPARC_WSI_BACKEND', 'openslide')
 
 # ── Per-cohort layout ──
 PATCHES_PER_NICHE = 6    # columns in the figure
@@ -224,7 +230,7 @@ NLST_RENAMES = {}  # use original names
 
 
 def deduce_nlst_grid(wsi_path, h5_n, tile=224):
-    w = openslide.OpenSlide(str(wsi_path))
+    w = open_slide(str(wsi_path), WSI_BACKEND)
     W, H = w.dimensions
     c_base = W // tile; r_base = H // tile
     for dc in (0, 1, -1):
@@ -256,10 +262,10 @@ def nlst_tissue_mask(uuid, n_rows, n_cols, tile_px):
         inside |= p.contains_points(centers)
     return inside
 
-
+# Function name kept unchanged after new slide backend addition so the caller needs no edit.
 def extract_patches_openslide(wsi_path, coords, patch_size=PATCH_PX, target_mpp=0.5):
-    w = openslide.OpenSlide(str(wsi_path))
-    actual_mpp = float(w.properties.get('openslide.mpp-x', target_mpp))
+    w = open_slide(str(wsi_path), WSI_BACKEND)
+    actual_mpp = read_mpp_from_props(w.properties) or target_mpp
     size_l0 = int(round(patch_size * target_mpp / actual_mpp))
     out = []
     for (cx, cy) in coords:
