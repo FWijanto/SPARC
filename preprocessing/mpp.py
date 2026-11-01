@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import re
+from functools import partial
 from pathlib import Path
 from typing import Callable, Iterable
 
