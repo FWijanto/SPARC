@@ -11,6 +11,7 @@ the SPARC preprocessing/analysis pipeline.
 
 from __future__ import annotations
 
+import os
 from typing import Literal, Optional
 
 SlideBackend = Literal["openslide", "tiffslide"]
@@ -124,6 +125,44 @@ def ensure_tiffslide_registered() -> None:
         divergence.
         """
 
+        def _open_tiffslide(self) -> None:
+            # Open the slide and remember which process
+            # opened it.  tifffile reads through one file handle using
+            # seek+read; when trident's feature extraction forks its DataLoader
+            # workers, every child would otherwise share the parent's handle
+            # and its file offset.  Interleaved reads then corrupt tile bytes
+            # openslide never hits this because the C library reads via
+            # offset-independent pread().
+            import tiffslide
+
+            self.img = tiffslide.TiffSlide(self.slide_path)
+            self._opened_pid = os.getpid()
+
+        def _ensure_process_local(self) -> None:
+            # If a forked worker inherited the parent's
+            # TiffSlide handle, reopen the slide so each process reads through
+            # its own handle.
+            if getattr(self, "img", None) is None:
+                return
+            if getattr(self, "_opened_pid", None) != os.getpid():
+                self._open_tiffslide()
+
+        def read_region(self, location, level, size, read_as="pil"):
+            # Choke point used by WSIPatcher in every
+            # forked worker: first make the handle process-local, then convert
+            # any decode failure into a plain picklable RuntimeError.
+            self._ensure_process_local()
+            try:
+                return super().read_region(location, level, size, read_as=read_as)
+            except RuntimeError:
+                raise
+            except Exception as e:
+                raise RuntimeError(
+                    f"tiffslide read_region failed for {self.slide_path!r} "
+                    f"level={level} location={tuple(location)} size={tuple(size)}: "
+                    f"{type(e).__name__}: {e}"
+                ) from e
+
         def _lazy_initialize(self) -> None:
             # Same body as trident's
             # OpenSlideWSI._lazy_initialize, but open with tiffslide.TiffSlide
@@ -134,9 +173,8 @@ def ensure_tiffslide_registered() -> None:
             WSI._lazy_initialize(self)
             if not self.lazy_init:
                 try:
-                    import tiffslide
-
-                    self.img = tiffslide.TiffSlide(self.slide_path)
+                    # [TIFFSLIDE CHANGE] open through the process-tracking helper
+                    self._open_tiffslide()
                     self.dimensions = self.get_dimensions()
                     self.width, self.height = self.dimensions
                     self.level_count = self.img.level_count
@@ -156,14 +194,19 @@ def ensure_tiffslide_registered() -> None:
             # tiffslide may expose MPP under its own keys;
             # try the inherited openslide keys first, then tiffslide-specific
             # keys, then a tifffile description fallback.
-            keys = list(custom_mpp_keys or []) + [
-                "tiffslide.mpp-x",
-                "tiffslide.mpp-y",
+            # tiffslide can include keys whose *value* is None. trident's
+            # base implementation does float(props[key]) and crashes with an
+            # unguarded TypeError on None, so drop None-valued keys before
+            # delegating and catch TypeError as well as ValueError here.
+            props = self.img.properties
+            keys = [
+                k for k in (list(custom_mpp_keys or []) + ["tiffslide.mpp-x", "tiffslide.mpp-y"])
+                if props.get(k) is not None
             ]
             try:
                 return super()._fetch_mpp(keys)
-            except ValueError:
-                mpp = read_mpp_from_props(self.img.properties)
+            except (ValueError, TypeError):
+                mpp = read_mpp_from_props(props)
                 if mpp is not None:
                     return mpp
                 raise
