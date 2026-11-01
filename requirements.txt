@@ -13,11 +13,11 @@ lifelines>=0.27
 
 # Optional — needed for spatial/niche-atlas figure regeneration
 openslide-python>=1.3
-tiffslide>=1.0
+tiffslide>=2.5.1,<3
 pylibCZIrw>=4.0
 Pillow>=10.0
 opencv-python>=4.8
-tifffile>=2023.9
+tifffile>=2023.9,<2025.5.21
 zarr>=2.16,<3
 geopandas>=0.14
 huggingface-hub>=0.20
