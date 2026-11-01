@@ -10,6 +10,11 @@ from typing import Callable, Iterable
 import pandas as pd
 from tqdm import tqdm
 
+from preprocessing.slide_backend import ( 
+    open_slide,
+    read_mpp_from_props,
+)
+
 SLIDE_EXTENSIONS = {".svs", ".tif", ".tiff", ".ndpi"}
 
 
@@ -24,19 +29,19 @@ def discover_slides(wsi_dir: Path) -> list[Path]:
     )
 
 
-def read_mpp(slide_path: Path, default_mpp: float) -> tuple[float, str]:
-    """Read MPP using OpenSlide, then Aperio TIFF metadata, then the default."""
+def read_mpp(slide_path: Path, default_mpp: float, backend: str="openslide") -> tuple[float, str]:
+    """Read MPP using the chosen backend, then Aperio TIFF metadata, then the default."""
     try:
-        import openslide
-
-        slide = openslide.OpenSlide(str(slide_path))
+        # Backend-aware open_slide()
+        slide = open_slide(slide_path, backend)
         try:
-            x = float(slide.properties.get("openslide.mpp-x", 0))
-            y = float(slide.properties.get("openslide.mpp-y", 0))
+            mpp = read_mpp_from_props(slide.properties)
         finally:
-            slide.close()
-        if x > 0 and y > 0:
-            return (x + y) / 2.0, "openslide"
+            close = getattr(slide, "close", None)
+            if close is not None:
+                close()
+        if mpp is not None:
+            return mpp, backend
     except Exception:
         pass
 
@@ -58,7 +63,8 @@ def prepare_mpp(
     output_csv: Path,
     default_mpp: float = 0.25,
     overwrite: bool = False,
-    reader: Callable[[Path, float], tuple[float, str]] = read_mpp,
+    reader: Callable[[Path, float], tuple[float, str]] | None = None,
+    backend: str = "openslide",
 ) -> Path:
     if default_mpp <= 0:
         raise ValueError("default_mpp must be positive")
@@ -68,6 +74,9 @@ def prepare_mpp(
     slides = discover_slides(wsi_dir)
     if not slides:
         raise FileNotFoundError(f"No supported slides found below {wsi_dir}")
+    # Thread the chosen backend into the MPP reader.
+    if reader is None:
+        reader = partial(read_mpp, backend=backend)
     rows = []
     for path in tqdm(slides, desc="Inspecting slide MPP"):
         mpp, source = reader(path, default_mpp)
@@ -83,12 +92,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-csv", type=Path, required=True)
     parser.add_argument("--default-mpp", type=float, default=0.25)
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--backend", choices=["openslide", "tiffslide"], default="openslide")
     return parser
 
 
 def main(argv: Iterable[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
-    path = prepare_mpp(args.wsi_dir, args.output_csv, args.default_mpp, args.overwrite)
+    path = prepare_mpp(args.wsi_dir, args.output_csv, args.default_mpp, args.overwrite, backend=args.backend,)
     print(f"Wrote MPP manifest: {path}")
 
 

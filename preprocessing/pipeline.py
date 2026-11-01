@@ -41,12 +41,21 @@ def run_map(embedding_dir: Path, output_dir: Path, model_path: Path,
     subprocess.run(command, env=environment, check=True)
 
 
+def _mpp_backend(reader_type: str) -> str:
+    # MPP probing only understands the openslide-like
+    # backends (openslide / tiffslide). trident's other reader types
+    # (image / cucim) keep their own MPP handling, so fall back to openslide
+    # for manifest generation.
+    return reader_type if reader_type in ("openslide", "tiffslide") else "openslide"
+
+
 def run_extract(args: argparse.Namespace) -> Path:
     args.work_dir.mkdir(parents=True, exist_ok=True)
     manifest = args.work_dir / "slides_with_mpp.csv"
     split_dir = args.work_dir / "split_lists"
     if not manifest.exists() or args.force:
-        prepare_mpp(args.wsi_dir, manifest, args.default_mpp, args.force)
+        prepare_mpp(args.wsi_dir, manifest, args.default_mpp, args.force,
+                    backend=_mpp_backend(args.reader_type))
     # Split manifests are cheap to regenerate and must match the current worker count.
     prepare_splits(manifest, split_dir, len(args.gpu_ids), overwrite=True)
     if args.hf_cache:
@@ -68,7 +77,7 @@ def add_extract_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--magnification", type=int, default=20)
     parser.add_argument("--overlap", type=int, default=0)
     parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--reader-type", choices=["openslide", "image", "cucim"], default="openslide")
+    parser.add_argument("--reader-type", choices=["openslide", "tiffslide", "image", "cucim"], default="openslide")
     parser.add_argument("--force", action="store_true")
 
 

@@ -8,6 +8,9 @@ import os
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from preprocessing.slide_backend import (
+    ensure_tiffslide_registered,
+)
 
 def parse_gpus(value: str | Sequence[int]) -> list[int]:
     items = value if not isinstance(value, str) else value.split(",")
@@ -29,6 +32,8 @@ def run_partition(wsi_dir: Path, work_dir: Path, split_csv: Path, gpu: int, patc
             "Raw-slide extraction requires TRIDENT; install SPARC with "
             "`pip install -e '.[wsi]'`."
         ) from exc
+
+    ensure_tiffslide_registered()
 
     processor = Processor(
         job_dir=str(work_dir), wsi_source=str(wsi_dir), custom_list_of_wsis=str(split_csv),
@@ -83,7 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--magnification", type=int, default=20)
     parser.add_argument("--overlap", type=int, default=0)
     parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--reader-type", choices=["openslide", "image", "cucim"], default="openslide")
+    parser.add_argument("--reader-type", choices=["openslide", "tiffslide", "image", "cucim"], default="openslide")
     return parser
 
 
