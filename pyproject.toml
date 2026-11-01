@@ -7,7 +7,7 @@ name = "SPARC"
 version = "0.1.0"
 description = "SPARC: gene-program-aware survival modelling from H&E whole-slide images."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10, <3.13"
 license = { text = "CC-BY-NC-4.0" }
 authors = [
     { name = "Aziz Ayed", email = "aziz.ayed@hec.edu" },
@@ -29,7 +29,8 @@ classifiers = [
 
 dependencies = [
     "torch==2.10.0",
-    "triton==3.6.0+rocm7.2.4.git4ed88892 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "torchvision==0.25.0",
+    "triton==3.6.0 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
     "numpy>=1.24",
     "pandas>=2.0",
     "openpyxl>=3.1",
@@ -44,6 +45,7 @@ dependencies = [
     "lifelines>=0.27",
     "opencv-python>=4.8",
     "openslide-python>=1.3",
+    "tiffslide>=1.0",
     "Pillow>=10.0",
     "tifffile>=2023.9",
     "zarr>=2.16,<3",
@@ -61,6 +63,7 @@ dependencies = [
 wsi = [
     "trident @ git+https://github.com/mahmoodlab/TRIDENT.git@2daba084238f72b8f207fb0b5fe25e44637a6b5c",
     "openslide-python>=1.3",
+    "tiffslide>=1.0",
     "pylibCZIrw>=4.0",
     "Pillow>=10.0",
 ]
